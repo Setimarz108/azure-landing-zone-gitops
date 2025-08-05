@@ -1,4 +1,5 @@
 Azure Landing Zone with GitOps
+
 Enterprise-grade Azure infrastructure demonstrating modern DevOps practices and German compliance standards.
 🏗️ Infrastructure Components
 
