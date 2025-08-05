@@ -1,3 +1,4 @@
+
 # Azure Landing Zone - Infrastructure Architecture
 
 ## Executive Summary
@@ -5,88 +6,48 @@
 This document describes the enterprise-grade Azure infrastructure architecture implementing a secure, scalable, and compliant landing zone following Microsoft's Cloud Adoption Framework and German GDPR requirements.
 
 ## High-Level Architecture
-┌─────────────────────────────────────────────────────────────────┐
-│                        AZURE SUBSCRIPTION                       │
-├─────────────────────────────────────────────────────────────────┤
-│                     Resource Group: azlz-dev-rg-001            │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                 NETWORKING TIER                         │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │            Virtual Network (10.1.0.0/16)       │    │    │
-│  │  │                                                 │    │    │
-│  │  │  Management Subnet (10.1.1.0/24)               │    │    │
-│  │  │  ├─ NSG: RDP/SSH from admin IPs only           │    │    │
-│  │  │  └─ Purpose: Secure admin access               │    │    │
-│  │  │                                                 │    │    │
-│  │  │  Application Subnet (10.1.2.0/24)             │    │    │
-│  │  │  ├─ NSG: HTTP/HTTPS traffic allowed            │    │    │
-│  │  │  └─ Purpose: Web applications & APIs           │    │    │
-│  │  │                                                 │    │    │
-│  │  │  Database Subnet (10.1.3.0/24)                │    │    │
-│  │  │  ├─ NSG: SQL from app subnet only              │    │    │
-│  │  │  └─ Purpose: Data layer isolation              │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                  SECURITY TIER                          │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │               Key Vault                         │    │    │
-│  │  │  ├─ Secrets: Admin passwords, connection strings│    │    │
-│  │  │  ├─ Access: Restricted to management subnet     │    │    │
-│  │  │  └─ Features: Soft delete, purge protection     │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  │                                                         │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │              Azure Policies                     │    │    │
-│  │  │  ├─ Tag enforcement for compliance              │    │    │
-│  │  │  ├─ Location restrictions (GDPR)                │    │    │
-│  │  │  └─ VM size limitations (cost control)          │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                 MONITORING TIER                         │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │           Log Analytics Workspace               │    │    │
-│  │  │  ├─ Centralized logging for all resources       │    │    │
-│  │  │  ├─ 90-day retention (GDPR compliant)           │    │    │
-│  │  │  └─ Custom queries for cost optimization        │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  │                                                         │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │            Application Insights                 │    │    │
-│  │  │  ├─ Application performance monitoring          │    │    │
-│  │  │  └─ Integrated with Log Analytics               │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  │                                                         │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │              Alert Management                   │    │    │
-│  │  │  ├─ Budget alerts (80%, 100%, 150%)             │    │    │
-│  │  │  ├─ Security event notifications                │    │    │
-│  │  │  └─ Resource deletion alerts                    │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                GOVERNANCE TIER                          │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │              Cost Management                    │    │    │
-│  │  │  ├─ Monthly budgets: Dev(€50), Prod(€200)       │    │    │
-│  │  │  ├─ Automated cost alerts                       │    │    │
-│  │  │  └─ Resource tagging for cost allocation        │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  │                                                         │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │           Resource Protection                   │    │    │
-│  │  │  ├─ Production: CanNotDelete locks              │    │    │
-│  │  │  └─ Development: Policy restrictions            │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  └─────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph AZURE_SUBSCRIPTION["AZURE SUBSCRIPTION"]
+        direction TB
+
+        subgraph RG["Resource Group: azlz-dev-rg-001"]
+            direction TB
+
+            subgraph NET["NETWORKING TIER"]
+                VNET["Virtual Network (10.1.0.0/16)"]
+
+                MGMT["Management Subnet (10.1.1.0/24)\n- NSG: RDP/SSH from admin IPs only\n- Purpose: Secure admin access"]
+                APP["Application Subnet (10.1.2.0/24)\n- NSG: HTTP/HTTPS traffic allowed\n- Purpose: Web applications & APIs"]
+                DB["Database Subnet (10.1.3.0/24)\n- NSG: SQL from app subnet only\n- Purpose: Data layer isolation"]
+
+                VNET --> MGMT
+                VNET --> APP
+                VNET --> DB
+            end
+
+            subgraph SEC["SECURITY TIER"]
+                KV["Key Vault\n- Secrets: Admin passwords, connection strings\n- Access: Restricted to management subnet\n- Features: Soft delete, purge protection"]
+                POL["Azure Policies\n- Tag enforcement\n- Location restrictions (GDPR)\n- VM size limitations"]
+            end
+
+            subgraph MON["MONITORING TIER"]
+                LOG["Log Analytics Workspace\n- Centralized logging\n- 90-day retention\n- Custom queries"]
+                INSIGHT["Application Insights\n- Performance monitoring\n- Integrated with Log Analytics"]
+                ALERT["Alert Management\n- Budget alerts (80%, 100%, 150%)\n- Security notifications\n- Deletion alerts"]
+            end
+
+            subgraph GOV["GOVERNANCE TIER"]
+                COST["Cost Management\n- Budgets: Dev(€50), Prod(€200)\n- Automated alerts\n- Resource tagging"]
+                PROTECT["Resource Protection\n- Prod: CanNotDelete locks\n- Dev: Policy restrictions"]
+            end
+
+        end
+    end
+```
 
 ## Network Flow Diagram
+```
 Internet Traffic Flow:
 ┌─────────────┐    ┌─────────────────┐    ┌───────────────────┐
 │   Internet  │───▶│  Management     │───▶│   Admin Access    │
@@ -113,6 +74,7 @@ Internet Traffic Flow:
 │  Log Analytics  │
 │  (All Logs)     │
 └─────────────────┘
+```
 
 ## Security Architecture
 
@@ -152,6 +114,4 @@ Internet Traffic Flow:
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: January 2025  
-**Author**: Sebastian Marquez (AZ-305, AZ-400)
+**Document Version**: 1.0
