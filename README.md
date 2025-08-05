@@ -252,7 +252,7 @@ This project is created for educational and portfolio purposes. Feel free to use
 **Sebastian Marquez**  
 📧 sebastian.marquez.dev@gmail.com  
 💼 [LinkedIn](https://linkedin.com/in/sebastian-marquez)  
-🔗 [Azure Certifications](https://learn.microsoft.com/en-us/users/sebastianmarquez)  
+🔗 [Azure Certifications](https://learn.microsoft.com/en-us/users/sebastianmarquez-4965/transcript/vn64qs4k163pkor)  
 
 ---
 
