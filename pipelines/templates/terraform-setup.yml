@@ -1,0 +1,27 @@
+# Terraform Setup Template
+# Reusable steps for setting up Terraform in Azure DevOps
+
+steps:
+- task: TerraformInstaller@0
+  displayName: 'Install Terraform'
+  inputs:
+    terraformVersion: $(terraformVersion)
+
+- task: AzureCLI@2
+  displayName: 'Azure CLI Login Check'
+  inputs:
+    azureSubscription: $(serviceConnection)
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      echo "Azure CLI Version:"
+      az --version
+      echo "Current subscription:"
+      az account show --output table
+
+- bash: |
+    echo "Terraform version:"
+    terraform version
+    echo "Working directory contents:"
+    ls -la $(System.DefaultWorkingDirectory)/terraform/
+  displayName: 'Environment Check'

@@ -1,0 +1,165 @@
+# Azure DevOps Pipeline for Terraform Infrastructure
+# Implements GitOps workflow with automated validation and deployment
+
+trigger:
+  branches:
+    include:
+    - main
+    - develop
+  paths:
+    include:
+    - terraform/*
+    - pipelines/*
+
+variables:
+  # Build Agent Configuration
+  vmImageName: 'ubuntu-latest'
+  
+  # Terraform Configuration
+  terraformVersion: '1.6.0'
+  
+  # Azure Service Connection (configured in Azure DevOps)
+  serviceConnection: 'azure-service-connection'
+  
+  # Backend Configuration
+  backendResourceGroup: 'terraform-state-rg'
+  backendStorageAccount: 'tfstateazlz$(Build.BuildId)'
+  backendContainerName: 'tfstate'
+
+stages:
+- stage: Validate
+  displayName: 'Terraform Validation'
+  jobs:
+  - job: ValidateInfrastructure
+    displayName: 'Validate Terraform Configuration'
+    pool:
+      vmImage: $(vmImageName)
+    
+    steps:
+    - template: templates/terraform-setup.yml
+    
+    - task: TerraformCLI@0
+      displayName: 'Terraform Init'
+      inputs:
+        command: 'init'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+        backendType: 'azurerm'
+        backendServiceArm: $(serviceConnection)
+        backendAzureRmResourceGroupName: $(backendResourceGroup)
+        backendAzureRmStorageAccountName: $(backendStorageAccount)
+        backendAzureRmContainerName: $(backendContainerName)
+        backendAzureRmKey: 'terraform.tfstate'
+    
+    - task: TerraformCLI@0
+      displayName: 'Terraform Validate'
+      inputs:
+        command: 'validate'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+    
+    - task: TerraformCLI@0
+      displayName: 'Terraform Format Check'
+      inputs:
+        command: 'fmt'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+        commandOptions: '-check -diff'
+
+- stage: Plan
+  displayName: 'Terraform Plan'
+  dependsOn: Validate
+  condition: succeeded()
+  jobs:
+  - job: PlanInfrastructure
+    displayName: 'Plan Infrastructure Changes'
+    pool:
+      vmImage: $(vmImageName)
+    
+    steps:
+    - template: templates/terraform-setup.yml
+    
+    - task: TerraformCLI@0
+      displayName: 'Terraform Init'
+      inputs:
+        command: 'init'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+        backendType: 'azurerm'
+        backendServiceArm: $(serviceConnection)
+        backendAzureRmResourceGroupName: $(backendResourceGroup)
+        backendAzureRmStorageAccountName: $(backendStorageAccount)
+        backendAzureRmContainerName: $(backendContainerName)
+        backendAzureRmKey: 'terraform.tfstate'
+    
+    - task: TerraformCLI@0
+      displayName: 'Terraform Plan - Development'
+      inputs:
+        command: 'plan'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+        environmentServiceName: $(serviceConnection)
+        commandOptions: '-var-file="environments/dev/terraform.tfvars" -out=tfplan-dev'
+    
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Terraform Plan'
+      inputs:
+        pathToPublish: '$(System.DefaultWorkingDirectory)/terraform/tfplan-dev'
+        artifactName: 'terraform-plan-dev'
+
+- stage: Deploy_Development
+  displayName: 'Deploy to Development'
+  dependsOn: Plan
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+  jobs:
+  - deployment: DeployDevelopment
+    displayName: 'Deploy to Development Environment'
+    pool:
+      vmImage: $(vmImageName)
+    environment: 'development'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - template: templates/terraform-setup.yml
+          
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Terraform Plan'
+            inputs:
+              artifactName: 'terraform-plan-dev'
+              downloadPath: '$(System.DefaultWorkingDirectory)/terraform'
+          
+          - task: TerraformCLI@0
+            displayName: 'Terraform Apply'
+            inputs:
+              command: 'apply'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+              environmentServiceName: $(serviceConnection)
+              commandOptions: 'tfplan-dev'
+
+- stage: Deploy_Production
+  displayName: 'Deploy to Production'
+  dependsOn: Plan
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - deployment: DeployProduction
+    displayName: 'Deploy to Production Environment'
+    pool:
+      vmImage: $(vmImageName)
+    environment: 'production'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - template: templates/terraform-setup.yml
+          
+          - task: TerraformCLI@0
+            displayName: 'Terraform Plan - Production'
+            inputs:
+              command: 'plan'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+              environmentServiceName: $(serviceConnection)
+              commandOptions: '-var-file="environments/prod/terraform.tfvars"'
+          
+          - task: TerraformCLI@0
+            displayName: 'Terraform Apply - Production'
+            inputs:
+              command: 'apply'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+              environmentServiceName: $(serviceConnection)
+              commandOptions: '-var-file="environments/prod/terraform.tfvars" -auto-approve'
